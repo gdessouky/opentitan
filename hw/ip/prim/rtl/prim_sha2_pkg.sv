@@ -129,9 +129,9 @@ package prim_sha2_pkg;
     shiftr64 = (v >> amt);
   endfunction : shiftr64
 
-  // compression function for SHA-256
-  function automatic sha_word64_t [7:0] compress_256( input sha_word32_t w, input sha_word32_t k,
-                                                input sha_word64_t [7:0] h_i);
+  // compression function for SHA-256 in multi-mode configuration
+  function automatic sha_word64_t [7:0] compress_multi_256( input sha_word32_t w,
+                                        input sha_word32_t k, input sha_word64_t [7:0] h_i);
     // as input: takes 64-bit word hash vector, 32-bit slice of w[0] and 32-bit constant
     automatic sha_word32_t sigma_0, sigma_1, ch, maj, temp1, temp2;
 
@@ -144,14 +144,37 @@ package prim_sha2_pkg;
     temp2 = (sigma_0 + maj);
 
     // 32-bit zero padding to complete 64-bit words of hash vector for output
-    compress_256[7] = {32'b0, h_i[6][31:0]};          // h = g
-    compress_256[6] = {32'b0, h_i[5][31:0]};          // g = f
-    compress_256[5] = {32'b0, h_i[4][31:0]};          // f = e
-    compress_256[4] = {32'b0, h_i[3][31:0] + temp1};  // e = (d + temp1)
-    compress_256[3] = {32'b0, h_i[2][31:0]};          // d = c
-    compress_256[2] = {32'b0, h_i[1][31:0]};          // c = b
-    compress_256[1] = {32'b0, h_i[0][31:0]};          // b = a
-    compress_256[0] = {32'b0, (temp1 + temp2)};       // a = (temp1 + temp2)
+    compress_multi_256[7] = {32'b0, h_i[6][31:0]};          // h = g
+    compress_multi_256[6] = {32'b0, h_i[5][31:0]};          // g = f
+    compress_multi_256[5] = {32'b0, h_i[4][31:0]};          // f = e
+    compress_multi_256[4] = {32'b0, h_i[3][31:0] + temp1};  // e = (d + temp1)
+    compress_multi_256[3] = {32'b0, h_i[2][31:0]};          // d = c
+    compress_multi_256[2] = {32'b0, h_i[1][31:0]};          // c = b
+    compress_multi_256[1] = {32'b0, h_i[0][31:0]};          // b = a
+    compress_multi_256[0] = {32'b0, (temp1 + temp2)};       // a = (temp1 + temp2)
+  endfunction : compress_multi_256
+
+  // compression function for SHA-256 in 256-only configuration
+  function automatic sha_word32_t [7:0] compress_256 ( input sha_word32_t w, input sha_word32_t k,
+                                                input sha_word32_t [7:0] h_i);
+    automatic sha_word32_t sigma_0, sigma_1, ch, maj, temp1, temp2;
+
+    sigma_1 = rotr32(h_i[4], 6) ^ rotr32(h_i[4], 11) ^ rotr32(h_i[4], 25);
+    ch = (h_i[4] & h_i[5]) ^ (~h_i[4] & h_i[6]);
+    temp1 = (h_i[7] + sigma_1 + ch + k + w);
+    sigma_0 = rotr32(h_i[0], 2) ^ rotr32(h_i[0], 13) ^ rotr32(h_i[0], 22);
+    maj = (h_i[0] & h_i[1]) ^ (h_i[0] & h_i[2]) ^
+          (h_i[1] & h_i[2]);
+    temp2 = (sigma_0 + maj);
+
+    compress_256[7] = h_i[6];          // h = g
+    compress_256[6] = h_i[5];          // g = f
+    compress_256[5] = h_i[4];          // f = e
+    compress_256[4] = h_i[3] + temp1;  // e = (d + temp1)
+    compress_256[3] = h_i[2];          // d = c
+    compress_256[2] = h_i[1];          // c = b
+    compress_256[1] = h_i[0];          // b = a
+    compress_256[0] = temp1 + temp2;       // a = (temp1 + temp2)
   endfunction : compress_256
 
   // compression function for SHA-512/384
@@ -211,4 +234,4 @@ package prim_sha2_pkg;
     SwPushMsgWhenDisallowed    = 32'h 0000_0005
   } err_code_e;
 
-endpackage : hmac_multimode_pkg
+endpackage : prim_sha2_pkg
