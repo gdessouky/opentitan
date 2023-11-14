@@ -2,12 +2,14 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 //
-// Multi-mode SHA-2 engine padding logic
-//
+// SHA-256/Multi-Mode SHA-2 Padding logic
 
 `include "prim_assert.sv"
 
-module prim_sha2_pad import prim_sha2_pkg::*; (
+module prim_sha2_pad import prim_sha2_pkg::*;
+#(
+  parameter bit MultimodeEn = 1
+ ) (
   input clk_i,
   input rst_ni,
 
@@ -27,31 +29,40 @@ module prim_sha2_pad import prim_sha2_pkg::*; (
   input                 hash_process,
   input                 hash_done,
 
-  input        [127:0]  message_length, // # of bytes in bits (8 bits granularity)
+  input        [127:0]  message_length,   // # of bytes in bits (8 bits granularity)
   output logic          msg_feed_complete // indicates all message is feeded
 );
 
-  logic [127:0] tx_count;    // fin received data count.
+  logic [127:0] tx_count_d, tx_count;    // fin received data count.
   logic         inc_txcount;
   logic         fifo_partial;
   logic         txcnt_eq_1a0;
-  logic         hash_process_flag; // set by hash_process, clear by hash_done
-  digest_mode_e digest_mode_flag;
+  logic         hash_process_flag_d, hash_process_flag;
+  digest_mode_e digest_mode_flag_d,  digest_mode_flag;
 
-  assign fifo_partial = ~&fifo_rdata.mask;
+  // TODO: tie off message_length[127:64] for !MultimodeEn, fifo_rdata.data and mask extra bits
+  // shaf_rdata extra bits, digest_mode, message_length extra bits, tx_count extra bits
+
+  assign fifo_partial = MultimodeEn ? ~&fifo_rdata.mask :
+                                      ~&fifo_rdata.mask[3:0];
 
   // tx_count[8:0] == 'h1c0 --> should send LenHi
-  assign txcnt_eq_1a0 = (digest_mode_flag == SHA2_256) ? (tx_count[8:0] == 9'h1a0) :
+  assign txcnt_eq_1a0 = (digest_mode_flag == SHA2_256   || ~MultimodeEn)               ?
+                                                                        (tx_count[8:0] == 9'h1a0)  :
                         ((digest_mode_flag == SHA2_384) || (digest_mode_flag == SHA2_512)) ?
-                        (tx_count[9:0] == 10'h340) : '0;
+                                                                        (tx_count[9:0] == 10'h340) :
+                                                                        '0;
+
+  assign hash_process_flag_d = (~sha_en || hash_start || hash_done) ? 1'b0 :
+                               hash_process                         ? 1'b1 :
+                                                                      hash_process_flag;
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni)                                 hash_process_flag <= 1'b0;
-    else if (!sha_en || hash_start || hash_done) hash_process_flag <= 1'b0;
-    else if (hash_process)                       hash_process_flag <= 1'b1;
+    if (!rst_ni)  hash_process_flag <= 1'b0;
+    else          hash_process_flag <= hash_process_flag_d;
   end
 
-  // Data path: fout_wdata
+  // data path: fout_wdata
   typedef enum logic [2:0] {
     FifoIn,         // fin_wdata, fin_wstrb
     Pad80,          // {8'h80, 8'h00} , strb (calc based on len[4:3])
@@ -73,7 +84,7 @@ module prim_sha2_pad import prim_sha2_pkg::*; (
         // msglen[4:3] == 01 |-> {msg,  'h80, 'h00, 'h00}
         // msglen[4:3] == 10 |-> {msg[15:0],  'h80, 'h00}
         // msglen[4:3] == 11 |-> {msg[23:0],        'h80}
-        if (digest_mode_flag == SHA2_256) begin
+        if ((digest_mode_flag == SHA2_256) || ~MultimodeEn) begin
           unique case (message_length[4:3])
             2'b 00:  shaf_rdata = 64'h 0000_0000_8000_0000;
             2'b 01:  shaf_rdata = {32'h 0000_0000, fifo_rdata.data[31:24], 24'h 8000_00};
@@ -102,21 +113,25 @@ module prim_sha2_pad import prim_sha2_pkg::*; (
       end
 
       LenHi: begin
-        shaf_rdata = (digest_mode_flag == SHA2_256) ? {32'b0, message_length[63:32]}:
+        shaf_rdata = ((digest_mode_flag == SHA2_256) || ~MultimodeEn) ?
+                                                     {32'b0, message_length[63:32]}:
                      ((digest_mode_flag == SHA2_384) || (digest_mode_flag == SHA2_512)) ?
-                     message_length[127:64] : '0;
+                                                     message_length[127:64] : '0;
       end
 
       LenLo: begin
-        shaf_rdata = (digest_mode_flag == SHA2_256) ? {32'b0, message_length[31:0]}:
+        shaf_rdata = ((digest_mode_flag == SHA2_256) || ~MultimodeEn) ?
+                                                     {32'b0, message_length[31:0]}:
                      ((digest_mode_flag == SHA2_384) || (digest_mode_flag == SHA2_512)) ?
-                     message_length[63:0]: '0;
+                                                     message_length[63:0]: '0;
       end
 
       default: begin
         shaf_rdata = '0;
       end
     endcase
+
+    if (!MultimodeEn) shaf_rdata [63:32] = 32'b0; // assign most sig 32 bits to constant 0
   end
 
   // Padded length
@@ -148,9 +163,7 @@ module prim_sha2_pad import prim_sha2_pkg::*; (
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) st_q <= StIdle;
-    else if (!sha_en) st_q <= StIdle;
-    else if (hash_start) st_q <= StFifoReceive;
-    else st_q <= st_d;
+    else         st_q <= st_d;
   end
 
   // Next state
@@ -186,7 +199,8 @@ module prim_sha2_pad import prim_sha2_pkg::*; (
           shaf_rvalid = fifo_rvalid;
           inc_txcount = shaf_rready;
           st_d = StFifoReceive;
-        end else if (tx_count == message_length) begin
+        end else if (((tx_count        == message_length) & MultimodeEn) ||
+                     ((tx_count [63:0] == message_length [63:0]) & !MultimodeEn)) begin
           // already received all msg and was waiting process flag
           shaf_rvalid  = 1'b0;
           inc_txcount  = 1'b0;
@@ -203,22 +217,23 @@ module prim_sha2_pad import prim_sha2_pkg::*; (
       StPad80: begin
         sel_data    = Pad80;
         shaf_rvalid = 1'b1;
-        fifo_rready = (digest_mode_flag == SHA2_256) ? shaf_rready && |message_length[4:3]:
+        fifo_rready = (digest_mode_flag == SHA2_256 || ~MultimodeEn) ?
+                      shaf_rready && |message_length[4:3] :
                       ((digest_mode_flag == SHA2_384) || (digest_mode_flag == SHA2_512)) ?
                       shaf_rready && |message_length[5:3] : '0; // Only when partial
 
         // exactly 192 bits left, do not need to pad00's
         if (shaf_rready && txcnt_eq_1a0) begin
-          st_d = StLenHi;
+          st_d        = StLenHi;
           inc_txcount = 1'b1;
         // it does not matter if value is < or > than 416 bits.  If it's the former, 00 pad until
         // length field.  If >, then the next chunk will contain the length field with appropriate
         // 0 padding.
         end else if (shaf_rready && !txcnt_eq_1a0) begin
-          st_d = StPad00;
+          st_d        = StPad00;
           inc_txcount = 1'b1;
         end else begin
-          st_d = StPad80;
+          st_d        = StPad80;
           inc_txcount = 1'b0;
         end
 
@@ -248,13 +263,13 @@ module prim_sha2_pad import prim_sha2_pkg::*; (
       end
 
       StPad00: begin
-        sel_data = Pad00;
+        sel_data    = Pad00;
         shaf_rvalid = 1'b1;
 
         if (shaf_rready) begin
           inc_txcount = 1'b1;
           if (txcnt_eq_1a0) st_d = StLenHi;
-          else st_d = StPad00;
+          else              st_d = StPad00;
         end else begin
           st_d = StPad00;
         end
@@ -290,28 +305,39 @@ module prim_sha2_pad import prim_sha2_pkg::*; (
         st_d = StIdle;
       end
     endcase
+
+    if (!sha_en)         st_d = StIdle;
+    else if (hash_start) st_d = StFifoReceive;
   end
 
   // tx_count
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      tx_count <= '0;
-    end else if (hash_start) begin
-      tx_count <= '0;
+  always_comb begin
+    tx_count_d = tx_count;
+
+    if (hash_start) begin
+      tx_count_d = '0;
     end else if (inc_txcount) begin
-      if (digest_mode_flag == SHA2_256) begin
-        tx_count[127:5] <= tx_count[127:5] + 1'b1;
+      if ((digest_mode_flag == SHA2_256) || !MultimodeEn) begin
+        tx_count_d[127:5] = tx_count[127:5] + 1'b1;
       end else if ((digest_mode_flag == SHA2_384) ||(digest_mode_flag == SHA2_512)) begin
-        tx_count[127:6] <= tx_count[127:6] + 1'b1;
+        tx_count_d[127:6] = tx_count[127:6] + 1'b1;
       end
     end
   end
 
-  // Latch SHA-2 configured mode
   always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni)                digest_mode_flag <= None;
-    else if (hash_start)        digest_mode_flag <= digest_mode;
-    else if (hash_done == 1'b1) digest_mode_flag <= None;
+    if (!rst_ni) tx_count <= '0;
+    else         tx_count <= tx_count_d;
+  end
+
+  assign digest_mode_flag_d = ~MultimodeEn ? None         :    // assign to constant
+                              hash_start   ? digest_mode  :    // latch in configured mode
+                              hash_done    ? None         :    // clear
+                                             digest_mode_flag; // keep
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni)         digest_mode_flag <= None;
+    else                 digest_mode_flag <= digest_mode_flag_d;
   end
 
   // State machine is in Idle only when it meets tx_count == message length
