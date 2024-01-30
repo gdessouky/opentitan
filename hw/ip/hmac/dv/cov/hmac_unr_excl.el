@@ -269,7 +269,7 @@ Condition 21 "3130851184" "(vld_rd_rsp && reqfifo_rdata.error) 1 -1" (3 "11")
 ANNOTATION: "VC_COV_UNR"
 Condition 22 "2942914969" "(vld_rd_rsp ? rspfifo_rdata.data_intg : prim_secded_pkg::SecdedInv3932ZeroEcc) 1 -1" (2 "1")
 ANNOTATION: "VC_COV_UNR"
-Condition 28 "1798941048" "(d_valid && d_error) 1 -1" (1 "01")sha_rready=1 requires sha_rvalid=1
+Condition 28 "1798941048" "(d_valid && d_error) 1 -1" (1 "01")
 ANNOTATION: "VC_COV_UNR"
 Condition 29 "1798941048" "((gnt_i | error_internal) & reqfifo_wready & sramreqfifo_wready) 1 -1" (3 "110")
 ANNOTATION: "VC_COV_UNR"
