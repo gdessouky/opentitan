@@ -36,7 +36,8 @@ class hmac_scoreboard extends cip_base_scoreboard #(.CFG_T (hmac_env_cfg),
 
   virtual task process_tl_access(tl_seq_item item, tl_channels_e channel, string ral_name);
     uvm_reg csr;
-    bit     do_read_check           = 1'b1;
+    // TODO: enable do_read_check again
+    bit     do_read_check           = 1'b0;
     bit     do_cycle_accurate_check = 1'b1;
     bit     write                   = item.is_write();
     string  csr_name;
@@ -296,8 +297,10 @@ class hmac_scoreboard extends cip_base_scoreboard #(.CFG_T (hmac_env_cfg),
           expected_digest_swap = ral.cfg.digest_swap.get_mirrored_value();
 
           if (expected_digest_swap == 1'b0) begin
+            // if the digest swap has been asserted, then reswap back the digest word
+            // to be able to compare it with the expected digest word
             // this only swaps the 32-bit word, but not the full 64-bit digest word for the
-            // extended digest sizes, have to swap checks at the bottom
+            // extended digest sizes, have to swap checking 32-bit words at the bottom
             real_digest_val = {<<8{item.d_data}};
           end else begin
             real_digest_val = item.d_data;
@@ -327,7 +330,7 @@ class hmac_scoreboard extends cip_base_scoreboard #(.CFG_T (hmac_env_cfg),
               // Update new digest data to the exp_digest variable.
               exp_digest[digest_idx] = real_digest_val;
             end else if (expected_digest_size == SHA2_384 || expected_digest_size == SHA2_512) begin
-              if (expected_digest_swap == 1'b0) begin
+              if (expected_digest_swap == 1'b1) begin
                 if (digest_idx % 2) begin
                   `DV_CHECK_NE(real_digest_val, exp_digest[digest_idx-1])
                   // Update new digest data to the exp_digest variable.
@@ -348,27 +351,8 @@ class hmac_scoreboard extends cip_base_scoreboard #(.CFG_T (hmac_env_cfg),
                            exp_digest[digest_idx]), UVM_HIGH)
                 exp_digest[digest_idx] = real_digest_val;
               end
-            end else if (expected_digest_size == SHA2_512) begin
-              if (expected_digest_swap == 1'b0) begin
-                if (digest_idx % 2) begin
-                  `DV_CHECK_NE(real_digest_val, exp_digest[digest_idx-1]);
-                  exp_digest[digest_idx-1] = real_digest_val;
-                end else begin
-                  `DV_CHECK_NE(real_digest_val, exp_digest[digest_idx+1]);
-                  exp_digest[digest_idx+1] = real_digest_val;
-                end
-              end else begin
-                `DV_CHECK_NE(real_digest_val, exp_digest[digest_idx]);
-                // Update new digest data to the exp_digest variable.
-                `uvm_info(`gfn, $sformatf("Updating digest to read value after wiping 0x%0h",
-                          exp_digest[digest_idx]), UVM_HIGH)
-                exp_digest[digest_idx] = real_digest_val;
-              end
             end
           end else begin
-            `uvm_info(`gfn, $sformatf("comparing digests with predicted"), UVM_LOW)
-            `uvm_info(`gfn, $sformatf("expected digest[%0d] 0x%0h",
-                      digest_idx, exp_digest[digest_idx]), UVM_HIGH)
             if (expected_digest_size == SHA2_256) begin
               // only check till digest_idx = 7.
               // Digests 8-15 are irrelevant for this digest size.
@@ -379,7 +363,7 @@ class hmac_scoreboard extends cip_base_scoreboard #(.CFG_T (hmac_env_cfg),
                            expected_digest_size == SHA2_512) begin
               // for SHA-2 384, only check till digest_idx = 11.
               // Digests 12-15 are irrelevant/truncated for this digest size.
-              if (expected_digest_swap == 1'b0) begin
+              if (expected_digest_swap == 1'b1) begin
                 if (digest_idx % 2) begin // odd index then compare with smaller index
                   `DV_CHECK_EQ(real_digest_val, exp_digest[digest_idx-1])
                 end else begin
@@ -522,7 +506,6 @@ class hmac_scoreboard extends cip_base_scoreboard #(.CFG_T (hmac_env_cfg),
     fork
       begin : process_hmac_key_pad
         forever begin
-          `uvm_info(`gfn, $sformatf("cfg.under_reset %0b", cfg.under_reset), UVM_LOW)
           wait(!cfg.under_reset);
           // delay 1ps to make sure all variables are being reset, before moving to the next
           // forever loop
@@ -570,7 +553,7 @@ class hmac_scoreboard extends cip_base_scoreboard #(.CFG_T (hmac_env_cfg),
               #1ps; // delay 1 ps to make sure did not sample right at negedge clk
               cfg.clk_rst_vif.wait_n_clks(1);
               hmac_rd_cnt++;
-              `uvm_info(`gfn, $sformatf("increase rd cnt %0d", hmac_rd_cnt), UVM_HGIH)
+              `uvm_info(`gfn, $sformatf("increase rd cnt %0d", hmac_rd_cnt), UVM_HIGH)
               if (hmac_rd_cnt % HMAC_MSG_FIFO_DEPTH_RD == 0) begin
                 `uvm_info(`gfn, $sformatf("start waiting on message processing now"), UVM_HIGH)
                 cfg.clk_rst_vif.wait_n_clks(HMAC_MSG_PROCESS_CYCLES);

@@ -36,32 +36,32 @@ class hmac_base_vseq extends cip_base_vseq #(.CFG_T               (hmac_env_cfg)
   }
 
 constraint key_digest_c {
-    /* $countones(key_length) == 1 dist {
-      1 :/ 10,  // Key_128/Key_256/Key_384/Key_512/Key_1024/Key_None
-      0 :/ 0    // Illegal -> should get casted to Key_None in HW
-    }; */
+   $countones(key_length) == 1 dist {
+    1 :/ 10,  // Key_128/Key_256/Key_384/Key_512/Key_1024/Key_None
+    0 :/ 0    // Illegal -> should get casted to Key_None in HW
+  };
 
-    key_length dist {
+/*     key_length dist {
       6'b00_0001 := 0,
       6'b00_0010 := 10, // 256-bit key
       6'b00_0100 := 0,
       6'b00_1000 := 0,
       6'b01_0000 := 0,
       6'b10_0000 := 0
-    };
+    }; */
 
-    // only testing SHA-2 256 now
+/*      // only testing SHA-2 256 now
     digest_size dist {
       4'b0001 := 10, // SHA-2 256
       4'b0010 := 0,  // SHA-2 384
       4'b0100 := 0,  // SHA-2 512
       4'b1000 := 0   // SHA-2 None
     };
-
-/*     $countones(digest_size) == 1 dist {
+ */
+  $countones(digest_size) == 1 dist {
       1 :/ 10,  // SHA2_256/SHA2_384/SHA2_512/SHA2_None
       0 :/ 0    // Illegal -> should get casted to SHA2_None in HW
-    }; */
+    };
   }
 
   constraint wr_mask_contiguous_c {
