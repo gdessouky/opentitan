@@ -203,6 +203,8 @@ module hmac_reg_top (
   logic [3:0] cfg_digest_size_wd;
   logic [5:0] cfg_key_length_qs;
   logic [5:0] cfg_key_length_wd;
+  logic cfg_key_swap_qs;
+  logic cfg_key_swap_wd;
   logic cmd_we;
   logic cmd_hash_start_wd;
   logic cmd_hash_process_wd;
@@ -212,6 +214,7 @@ module hmac_reg_top (
   logic status_fifo_empty_qs;
   logic status_fifo_full_qs;
   logic [5:0] status_fifo_depth_qs;
+  logic status_hmac_idle_qs;
   logic [31:0] err_code_qs;
   logic wipe_secret_we;
   logic [31:0] wipe_secret_wd;
@@ -594,7 +597,7 @@ module hmac_reg_top (
 
   // R[cfg]: V(True)
   logic cfg_qe;
-  logic [5:0] cfg_flds_we;
+  logic [6:0] cfg_flds_we;
   assign cfg_qe = &cfg_flds_we;
   //   F[hmac_en]: 0:0
   prim_subreg_ext #(
@@ -691,6 +694,22 @@ module hmac_reg_top (
     .qs     (cfg_key_length_qs)
   );
   assign reg2hw.cfg.key_length.qe = cfg_qe;
+
+  //   F[key_swap]: 14:14
+  prim_subreg_ext #(
+    .DW    (1)
+  ) u_cfg_key_swap (
+    .re     (cfg_re),
+    .we     (cfg_we),
+    .wd     (cfg_key_swap_wd),
+    .d      (hw2reg.cfg.key_swap.d),
+    .qre    (),
+    .qe     (cfg_flds_we[6]),
+    .q      (reg2hw.cfg.key_swap.q),
+    .ds     (),
+    .qs     (cfg_key_swap_qs)
+  );
+  assign reg2hw.cfg.key_swap.qe = cfg_qe;
 
 
   // R[cmd]: V(True)
@@ -806,6 +825,21 @@ module hmac_reg_top (
     .q      (),
     .ds     (),
     .qs     (status_fifo_depth_qs)
+  );
+
+  //   F[hmac_idle]: 10:10
+  prim_subreg_ext #(
+    .DW    (1)
+  ) u_status_hmac_idle (
+    .re     (status_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.status.hmac_idle.d),
+    .qre    (),
+    .qe     (),
+    .q      (),
+    .ds     (),
+    .qs     (status_hmac_idle_qs)
   );
 
 
@@ -2073,6 +2107,8 @@ module hmac_reg_top (
   assign cfg_digest_size_wd = reg_wdata[7:4];
 
   assign cfg_key_length_wd = reg_wdata[13:8];
+
+  assign cfg_key_swap_wd = reg_wdata[14];
   assign cmd_we = addr_hit[5] & reg_we & !reg_error;
 
   assign cmd_hash_start_wd = reg_wdata[0];
@@ -2352,6 +2388,7 @@ module hmac_reg_top (
         reg_rdata_next[3] = cfg_digest_swap_qs;
         reg_rdata_next[7:4] = cfg_digest_size_qs;
         reg_rdata_next[13:8] = cfg_key_length_qs;
+        reg_rdata_next[14] = cfg_key_swap_qs;
       end
 
       addr_hit[5]: begin
@@ -2365,6 +2402,7 @@ module hmac_reg_top (
         reg_rdata_next[0] = status_fifo_empty_qs;
         reg_rdata_next[1] = status_fifo_full_qs;
         reg_rdata_next[9:4] = status_fifo_depth_qs;
+        reg_rdata_next[10] = status_hmac_idle_qs;
       end
 
       addr_hit[7]: begin

@@ -161,23 +161,29 @@ The register is updated when the engine is in Idle.
 If the software updates the register while the engine computes the hash, the updated value is discarded.
 - Offset: `0x10`
 - Reset default: `0x2080`
-- Reset mask: `0x3fff`
+- Reset mask: `0x7fff`
 
 ### Fields
 
 ```wavejson
-{"reg": [{"name": "hmac_en", "bits": 1, "attr": ["rw"], "rotate": -90}, {"name": "sha_en", "bits": 1, "attr": ["rw"], "rotate": -90}, {"name": "endian_swap", "bits": 1, "attr": ["rw"], "rotate": -90}, {"name": "digest_swap", "bits": 1, "attr": ["rw"], "rotate": -90}, {"name": "digest_size", "bits": 4, "attr": ["rw"], "rotate": -90}, {"name": "key_length", "bits": 6, "attr": ["rw"], "rotate": 0}, {"bits": 18}], "config": {"lanes": 1, "fontsize": 10, "vspace": 130}}
+{"reg": [{"name": "hmac_en", "bits": 1, "attr": ["rw"], "rotate": -90}, {"name": "sha_en", "bits": 1, "attr": ["rw"], "rotate": -90}, {"name": "endian_swap", "bits": 1, "attr": ["rw"], "rotate": -90}, {"name": "digest_swap", "bits": 1, "attr": ["rw"], "rotate": -90}, {"name": "digest_size", "bits": 4, "attr": ["rw"], "rotate": -90}, {"name": "key_length", "bits": 6, "attr": ["rw"], "rotate": 0}, {"name": "key_swap", "bits": 1, "attr": ["rw"], "rotate": -90}, {"bits": 17}], "config": {"lanes": 1, "fontsize": 10, "vspace": 130}}
 ```
 
 |  Bits  |  Type  |  Reset  | Name                             |
 |:------:|:------:|:-------:|:---------------------------------|
-| 31:14  |        |         | Reserved                         |
+| 31:15  |        |         | Reserved                         |
+|   14   |   rw   |   0x0   | [key_swap](#cfg--key_swap)       |
 |  13:8  |   rw   |  0x20   | [key_length](#cfg--key_length)   |
 |  7:4   |   rw   |   0x8   | [digest_size](#cfg--digest_size) |
 |   3    |   rw   |   0x0   | [digest_swap](#cfg--digest_swap) |
 |   2    |   rw   |   0x0   | [endian_swap](#cfg--endian_swap) |
 |   1    |   rw   |    x    | [sha_en](#cfg--sha_en)           |
 |   0    |   rw   |    x    | [hmac_en](#cfg--hmac_en)         |
+
+### CFG . key_swap
+Key register byte swap.
+
+If 1 the endianness of each KEY_* register is swapped.
 
 ### CFG . key_length
 Key length configuration.
@@ -278,17 +284,18 @@ CPU must configure relative information first, such as the digest size, secret k
 HMAC Status register
 - Offset: `0x18`
 - Reset default: `0x1`
-- Reset mask: `0x3f3`
+- Reset mask: `0x7f3`
 
 ### Fields
 
 ```wavejson
-{"reg": [{"name": "fifo_empty", "bits": 1, "attr": ["ro"], "rotate": -90}, {"name": "fifo_full", "bits": 1, "attr": ["ro"], "rotate": -90}, {"bits": 2}, {"name": "fifo_depth", "bits": 6, "attr": ["ro"], "rotate": 0}, {"bits": 22}], "config": {"lanes": 1, "fontsize": 10, "vspace": 120}}
+{"reg": [{"name": "fifo_empty", "bits": 1, "attr": ["ro"], "rotate": -90}, {"name": "fifo_full", "bits": 1, "attr": ["ro"], "rotate": -90}, {"bits": 2}, {"name": "fifo_depth", "bits": 6, "attr": ["ro"], "rotate": 0}, {"name": "hmac_idle", "bits": 1, "attr": ["ro"], "rotate": -90}, {"bits": 21}], "config": {"lanes": 1, "fontsize": 10, "vspace": 120}}
 ```
 
 |  Bits  |  Type  |  Reset  | Name       | Description                                                                                        |
 |:------:|:------:|:-------:|:-----------|:---------------------------------------------------------------------------------------------------|
-| 31:10  |        |         |            | Reserved                                                                                           |
+| 31:11  |        |         |            | Reserved                                                                                           |
+|   10   |   ro   |    x    | hmac_idle  | HMAC idle status.                                                                                  |
 |  9:4   |   ro   |    x    | fifo_depth | FIFO entry count.                                                                                  |
 |  3:2   |        |         |            | Reserved                                                                                           |
 |   1    |   ro   |    x    | fifo_full  | FIFO full. Data written to the FIFO whilst it is full will cause back-pressure on the interconnect |

@@ -86,6 +86,7 @@ module hmac
   logic        hmac_en;
   logic        endian_swap;
   logic        digest_swap;
+  logic        key_swap;
 
   logic        reg_hash_start;
   logic        sha_hash_start;
@@ -134,6 +135,7 @@ module hmac
   assign hw2reg.status.fifo_full.d  = fifo_full;
   assign hw2reg.status.fifo_empty.d = fifo_empty;
   assign hw2reg.status.fifo_depth.d = fifo_depth;
+  assign hw2reg.status.hmac_idle.d  = idle;
 
   typedef enum logic [1:0] {
     DoneAwaitCmd,
@@ -205,7 +207,7 @@ module hmac
       // Allow updating secret key only when the engine is in Idle.
       for (int i = 0; i < 32; i++) begin
         if (reg2hw.key[31-i].qe) begin
-          secret_key_d[32*i+:32] = reg2hw.key[31-i].q;
+          secret_key_d[32*i+:32] = conv_endian32(reg2hw.key[31-i].q, key_swap);
         end
       end
     end
@@ -311,6 +313,7 @@ module hmac
 
   assign endian_swap = cfg_reg.endian_swap.q;
   assign digest_swap = cfg_reg.digest_swap.q;
+  assign key_swap    = cfg_reg.key_swap.q;
 
   assign hw2reg.cfg.hmac_en.d     = cfg_reg.hmac_en.q;
   assign hw2reg.cfg.sha_en.d      = cfg_reg.sha_en.q;
@@ -318,6 +321,8 @@ module hmac
   assign hw2reg.cfg.key_length.d  = key_length_e'(key_length);
   assign hw2reg.cfg.endian_swap.d = cfg_reg.endian_swap.q;
   assign hw2reg.cfg.digest_swap.d = cfg_reg.digest_swap.q;
+  assign hw2reg.cfg.key_swap.d    = cfg_reg.key_swap.q;
+
 
   assign reg_hash_start    = reg2hw.cmd.hash_start.qe & reg2hw.cmd.hash_start.q;
   assign reg_hash_stop     = reg2hw.cmd.hash_stop.qe & reg2hw.cmd.hash_stop.q;
@@ -371,6 +376,10 @@ module hmac
         },
         key_length: '{
           q: HMAC_CFG_KEY_LENGTH_RESVAL,
+          qe: 1'b0
+        },
+        key_swap: '{
+          q: HMAC_CFG_KEY_SWAP_RESVAL,
           qe: 1'b0
         },
         default:'0

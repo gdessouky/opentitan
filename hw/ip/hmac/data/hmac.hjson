@@ -316,6 +316,19 @@
           tags: [// Exclude fields with non-zero reset value from write-read checks.
                  "excl:CsrNonInitTests:CsrExclWriteCheck"]
         }
+        { bits: "14",
+          name: "key_swap",
+          desc: '''Key register byte swap.
+
+                If 1 the endianness of each KEY_* register is swapped.
+                ''',
+          resval: "0",
+          tags: [
+            // Don't enable/disable key swap in automated CSR tests because it will have side effects on the KEY_* CSRs that the automated tests don't know of.
+            // This field will be covered in functional tests instead.
+            "excl:CsrAllTests:CsrExclWrite"
+          ]
+        }
       ],
     }
     { name: "CMD",
@@ -373,6 +386,10 @@
         { bits: "9:4",
           name: "fifo_depth",
           desc: "FIFO entry count."
+        }
+        { bits: "10",
+          name: "hmac_idle",
+          desc: "HMAC idle status."
         }
       ]
     }
